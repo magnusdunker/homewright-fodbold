@@ -6,7 +6,7 @@ mod host;
 use std::time::Duration;
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
-use homewright_fodbold::{espn, Fodbold};
+use homewright_fodbold::{dbu, espn, Fodbold};
 use host::FakeHost;
 use serde_json::{json, Value};
 use wiremock::matchers::{method, path};
@@ -275,6 +275,139 @@ async fn setup_without_espn_is_retried() {
     assert_eq!(e["data"]["kind"], "not_ready");
 }
 
+fn page(name: &str) -> String {
+    std::fs::read_to_string(format!("{}/tests/fixtures/{name}.html", env!("CARGO_MANIFEST_DIR"))).unwrap()
+}
+
+#[test]
+fn dbu_finds_the_first_division_and_its_teams() {
+    let rows = dbu::league_rows(&page("dbu-raekkesoeg"));
+    assert_eq!(rows, [("134718".to_string(), "Betinia LIGA - Grundspil 2026/27".to_string())]);
+    assert_eq!(dbu::pool_from_url("https://www.dbu.dk/resultater/pulje/507530").as_deref(), Some("507530"));
+
+    let teams = dbu::parse_team_list(&page("dbu-holdoversigt-507530"));
+    assert_eq!(teams.len(), 12);
+    let hobro = teams.iter().find(|t| t.name == "Hobro IK").unwrap();
+    assert_eq!(hobro.id, "3363");
+    assert_eq!(hobro.key(), "dbu.1div/3363");
+    assert_eq!(teams[0].name, "AaB");
+
+    // Hobro's club lists the league and the cup
+    let pools = dbu::team_pools(&page("dbu-klub-69"), "3363");
+    assert_eq!(
+        pools,
+        [("507530".to_string(), "Betinia LIGA - Grundspil 2026/27".to_string()), ("508655".to_string(), "Betano Pokalen 2026/27".to_string())]
+    );
+    assert_eq!(dbu::split_competition("Betinia LIGA - Grundspil 2026/27"), ("Betinia LIGA".to_string(), Some("Grundspil".to_string())));
+    assert_eq!(dbu::split_competition("Betano Pokalen 2026/27"), ("Betano Pokalen".to_string(), None));
+}
+
+#[test]
+fn dbu_fixtures_for_hobro() {
+    let league = dbu::parse_fixtures(&page("dbu-hold-3363_507530"), "3363", "Betinia LIGA - Grundspil 2026/27");
+    assert_eq!(league.len(), 22);
+    let first = &league[0];
+    assert_eq!(first.id, "169443");
+    assert_eq!(first.start, dbu::local(2026, 7, 26, 14, 0));
+    assert_eq!(first.title(), "Hobro IK - Aarhus Fremad");
+    assert_eq!(first.state, "post");
+    assert_eq!(first.tv.as_deref(), Some("Viaplay"));
+
+    let up = espn::upcoming(league, at("2026-10-20T12:00:00Z"));
+    let m = &up[0];
+    assert_eq!(m.id, "173970");
+    // Friday 18:00 Danish summer time
+    assert_eq!(m.start, at("2026-10-23T16:00:00Z"));
+    assert_eq!(m.title(), "Hobro IK - Vendsyssel FF");
+    assert_eq!(m.opponent, "Vendsyssel FF");
+    assert!(m.home);
+    assert_eq!(m.competition, "Betinia LIGA");
+    assert_eq!(m.round.as_deref(), Some("Grundspil"));
+    assert_eq!(m.venue.as_deref(), Some("DS Arena (Hobro)"));
+    assert!(m.opponent_logo.as_deref().unwrap().starts_with("https://file.dbu.dk/images/club/"));
+    assert!(m.time_confirmed);
+    // the next one is away, after the change to winter time
+    assert_eq!(up[1].start, at("2026-10-30T18:00:00Z"));
+    assert_eq!(up[1].home_away(), "ude");
+
+    // out of the cup already
+    let cup = dbu::parse_fixtures(&page("dbu-hold-3363_508655"), "3363", "Betano Pokalen 2026/27");
+    assert_eq!(cup.len(), 1);
+    assert_eq!(cup[0].competition, "Betano Pokalen");
+    assert_eq!(cup[0].state, "post");
+}
+
+/// DBU's fixture table for team 3363 with one match `days` from now against `them`.
+fn dbu_table(days: i64, them: (&str, &str)) -> String {
+    let t = (Utc::now() + ChronoDuration::days(days)).with_timezone(&chrono_tz::Europe::Copenhagen);
+    format!(
+        r#"<table><thead><tr><th></th><th>Kampnr</th><th>Dato</th><th>Tid</th><th>Hjemme</th><th>Ude</th><th>Spillested</th><th class="center-col">Resultat</th></tr></thead><tbody>
+<tr class="odd" onclick="MatchProgramMatchClick('/resultater/kamp/1_507530/kampinfo')">
+<td class="hide-on-mobile"></td><td class="hide-on-mobile">1</td>
+<td class="hide-on-mobile"><div class="matchprogram-date"><span>fre.</span>{}</div></td><td class="hide-on-mobile">{}</td>
+<td class="hide-on-mobile"><a class="link" href="/resultater/hold/{}_507530">{}</a></td>
+<td class="hide-on-mobile"><a class="link" href="/resultater/hold/3363_507530">Hobro IK</a></td>
+<td class="hide-on-mobile">Stadion</td><td class="result-col hide-on-mobile"></td>
+<td class=" only-on-mobile">mobil</td></tr></tbody></table>"#,
+        t.format("%d-%m %Y"),
+        t.format("%H:%M"),
+        them.0,
+        them.1
+    )
+}
+
+async fn serve_html(server: &MockServer, p: &str, body: String) {
+    let r = ResponseTemplate::new(200).set_body_raw(body.into_bytes(), "text/html; charset=utf-8");
+    Mock::given(method("GET")).and(path(p)).respond_with(r).mount(server).await;
+}
+
+#[tokio::test]
+async fn first_division_from_dbu() {
+    let espn = MockServer::start().await;
+    let dbu_server = MockServer::start().await;
+    serve_html(&dbu_server, "/resultater/raekkesoeg/", page("dbu-raekkesoeg")).await;
+    let to_pool = ResponseTemplate::new(302).insert_header("location", "/resultater/pulje/507530");
+    Mock::given(method("GET")).and(path("/resultater/Raekke/134718")).respond_with(to_pool).mount(&dbu_server).await;
+    serve_html(&dbu_server, "/resultater/pulje/507530", String::from("<html></html>")).await;
+    serve_html(&dbu_server, "/resultater/pulje/507530/holdoversigt", page("dbu-holdoversigt-507530")).await;
+    serve_html(&dbu_server, "/resultater/hold/3363_507530/", String::from(r#"<a href="/resultater/klub/69/">Hobro IK</a>"#)).await;
+    serve_html(&dbu_server, "/resultater/klub/69", page("dbu-klub-69")).await;
+    serve_html(&dbu_server, "/resultater/hold/3363_507530/kampprogram", dbu_table(3, ("13039", "Vejle Boldklub"))).await;
+    serve_html(&dbu_server, "/resultater/hold/3363_508655/kampprogram", page("dbu-hold-3363_508655")).await;
+
+    let host = FakeHost::start(Fodbold::new(&espn.uri(), Duration::from_secs(60)).with_dbu(&dbu_server.uri()));
+    let dir = std::env::temp_dir().join(format!("fodbold-test-{}-{}", std::process::id(), rand_suffix()));
+    host.call("initialize", json!({ "api_version": 1, "data_dir": dir })).await.unwrap();
+
+    let r = host.call("config_flow", json!({ "flow": flow(json!({})), "step": "user", "input": { "leagues": ["dbu.1div"] } })).await.unwrap();
+    assert_eq!(r["result"]["step_id"], "teams");
+    assert_eq!(r["data"]["dbu_pool"], "507530");
+    let teams = r["result"]["schema"]["properties"]["teams"]["items"]["oneOf"].as_array().unwrap().clone();
+    assert!(teams.contains(&json!({ "const": "dbu.1div/3363", "title": "Hobro IK" })), "{teams:?}");
+    let f = json!({ "flow": flow(r["data"].clone()), "step": "teams", "input": { "teams": ["dbu.1div/3363"] } });
+    let r = host.call("config_flow", f).await.unwrap();
+    assert_eq!(r["result"]["type"], "create_entry");
+    let saved = r["result"]["data"]["teams"][0].clone();
+    assert_eq!(saved["club"], "69");
+
+    let entry = json!({ "entry_id": "e4", "title": "Hobro IK", "data": r["result"]["data"] });
+    host.call("setup_entry", json!({ "entry": entry })).await.unwrap();
+    {
+        let rec = host.rec.lock().unwrap();
+        assert_eq!(rec.devices[0]["manufacturer"], "DBU");
+        assert_eq!(rec.devices[0]["model"], "1. division");
+        assert_eq!(rec.devices[0]["configuration_url"], "https://www.dbu.dk/resultater/klub/69");
+    }
+    let (state, attrs) = host.state("sensor.odense_n_ste_kamp").unwrap();
+    let start = (Utc::now() + ChronoDuration::days(3)).format("%Y-%m-%dT%H:%M:00Z").to_string();
+    assert_eq!(state, start);
+    assert_eq!(attrs["match"], "Vejle Boldklub - Hobro IK");
+    assert_eq!(attrs["home_away"], "ude");
+    assert_eq!(attrs["competition"], "Betinia LIGA");
+    assert_eq!(attrs["attribution"], "Kampprogram fra DBU");
+    assert_eq!(host.state("sensor.odense_modstander").unwrap().0, "Vejle Boldklub");
+}
+
 /// Against ESPN: `cargo test -- --ignored live --nocapture`.
 #[tokio::test]
 #[ignore]
@@ -294,5 +427,41 @@ async fn live() {
         for m in up.iter().take(3) {
             println!("{} {} {} ({})", homewright_fodbold::when_da(m.start), m.title(), m.competition, m.home_away());
         }
+    }
+}
+
+/// Against DBU: `cargo test -- --ignored live_dbu --nocapture`.
+#[tokio::test]
+#[ignore]
+async fn live_dbu() {
+    let client = reqwest::Client::builder().user_agent("homewright-fodbold-test").build().unwrap();
+    let get = |url: String| {
+        let client = client.clone();
+        async move {
+            let r = client.get(url).send().await.unwrap();
+            (r.url().to_string(), r.text().await.unwrap())
+        }
+    };
+    let (_, search) = get(format!("{}{}", dbu::BASE_URL, dbu::ROW_SEARCH)).await;
+    let (row, name) = dbu::league_rows(&search).into_iter().next().expect("ingen 1. division");
+    let (at, _) = get(format!("{}/resultater/Raekke/{row}", dbu::BASE_URL)).await;
+    let pool = dbu::pool_from_url(&at).unwrap();
+    let (_, list) = get(format!("{}/resultater/pulje/{pool}/holdoversigt", dbu::BASE_URL)).await;
+    let teams = dbu::parse_team_list(&list);
+    println!("{name}: pulje {pool}, {} hold", teams.len());
+    assert!(teams.len() >= 10);
+    for t in teams.iter().take(3) {
+        let (_, page) = get(format!("{}/resultater/hold/{}_{pool}/", dbu::BASE_URL, t.id)).await;
+        let club = dbu::club_of(&page).unwrap();
+        let (_, club_page) = get(format!("{}/resultater/klub/{club}", dbu::BASE_URL)).await;
+        let mut all = vec![];
+        for (p, competition) in dbu::team_pools(&club_page, &t.id) {
+            let (_, html) = get(format!("{}/resultater/hold/{}_{p}/kampprogram", dbu::BASE_URL, t.id)).await;
+            all.extend(dbu::parse_fixtures(&html, &t.id, &competition));
+        }
+        let up = espn::upcoming(all, Utc::now());
+        assert!(!up.is_empty(), "{}", t.name);
+        let m = &up[0];
+        println!("{} (klub {club}): {} {} {} ({})", t.name, homewright_fodbold::when_da(m.start), m.title(), m.competition, m.home_away());
     }
 }

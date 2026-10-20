@@ -25,6 +25,8 @@ const EUROPE: &[&str] = &["uefa.champions", "uefa.europa", "uefa.europa.conf"];
 /// Nations League, which has every European team.
 pub const LEAGUES: &[League] = &[
     League { slug: "den.1", name: "Superligaen", also: EUROPE },
+    // from DBU, not ESPN; see `dbu`
+    League { slug: "dbu.1div", name: "1. division", also: &[] },
     League { slug: "eng.1", name: "Premier League", also: &["eng.fa", "eng.league_cup", "uefa.champions", "uefa.europa", "uefa.europa.conf"] },
     League { slug: "eng.2", name: "Championship", also: &["eng.fa", "eng.league_cup"] },
     League { slug: "esp.1", name: "LaLiga", also: &["esp.copa_del_rey", "uefa.champions", "uefa.europa", "uefa.europa.conf"] },
@@ -85,6 +87,8 @@ pub struct Team {
     /// The league it was picked from.
     pub league: String,
     pub logo: Option<String>,
+    /// DBU's club id, for a team from the 1. division.
+    pub club: Option<String>,
 }
 
 impl Team {
@@ -94,7 +98,7 @@ impl Team {
     }
 
     pub fn to_json(&self) -> Value {
-        json!({ "id": self.id, "name": self.name, "league": self.league, "logo": self.logo })
+        json!({ "id": self.id, "name": self.name, "league": self.league, "logo": self.logo, "club": self.club })
     }
 
     pub fn from_json(v: &Value) -> Option<Team> {
@@ -103,6 +107,7 @@ impl Team {
             name: v["name"].as_str()?.to_string(),
             league: v["league"].as_str()?.to_string(),
             logo: v["logo"].as_str().map(String::from),
+            club: v["club"].as_str().map(String::from),
         })
     }
 }
@@ -124,10 +129,11 @@ pub fn parse_teams(league: &str, v: &Value) -> Vec<Team> {
                 name: t["displayName"].as_str()?.to_string(),
                 league: league.to_string(),
                 logo: logo(t),
+                club: None,
             })
         })
         .collect();
-    teams.sort_by(|a, b| a.name.cmp(&b.name));
+    teams.sort_by_key(|t| t.name.to_lowercase());
     teams
 }
 
@@ -149,6 +155,8 @@ pub struct Match {
     pub opponent_logo: Option<String>,
     pub venue: Option<String>,
     pub city: Option<String>,
+    /// The channel, from DBU.
+    pub tv: Option<String>,
     /// ESPN's `pre`, `in` or `post`.
     pub state: String,
 }
@@ -206,6 +214,7 @@ pub fn parse_schedule(competition: &str, team_id: &str, v: &Value) -> Vec<Match>
                 opponent_logo: logo(&them["team"]),
                 venue: c["venue"]["fullName"].as_str().map(String::from),
                 city: c["venue"]["address"]["city"].as_str().map(String::from),
+                tv: None,
                 state: c["status"]["type"]["state"].as_str().unwrap_or("pre").to_string(),
             })
         })

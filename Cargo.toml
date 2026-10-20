@@ -1,6 +1,6 @@
 [package]
 name = "homewright-fodbold"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 description = "Næste kamp for dine fodboldhold som ekstern integration til Homewright"
@@ -17,6 +17,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+chrono-tz = "0.10"
+regex = { version = "1", default-features = false, features = ["std", "unicode-perl"] }
 
 [dev-dependencies]
 wiremock = "0.6"
