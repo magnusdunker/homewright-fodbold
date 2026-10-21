@@ -3,7 +3,7 @@ name = "homewright-fodbold"
 version = "0.2.0"
 edition = "2021"
 license = "MIT"
-description = "Næste kamp for dine fodboldhold som ekstern integration til Homewright"
+description = "Næste kamp for dine fodboldhold som ekstern integration til HomewrightHQ"
 publish = false
 
 [[bin]]

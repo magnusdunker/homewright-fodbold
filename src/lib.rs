@@ -1,9 +1,9 @@
 //! The next match for one or more football teams as an external integration
-//! for Homewright.
+//! for HomewrightHQ.
 //!
 //! The fixtures come from ESPN's JSON, and for the 1. division from DBU's
 //! results pages. `espn` knows the leagues and reads ESPN's answers, `dbu`
-//! reads DBU's pages, and this file connects them to Homewright through the
+//! reads DBU's pages, and this file connects them to HomewrightHQ through the
 //! `thehome-plugin` SDK.
 
 pub mod dbu;
@@ -26,7 +26,7 @@ const FAILURES: u32 = 3;
 /// Matches listed in the attribute `upcoming`.
 const UPCOMING: usize = 5;
 
-/// Logging to Homewright's log through stderr.
+/// Logging to HomewrightHQ's log through stderr.
 #[doc(hidden)]
 pub fn emit(level: &str, message: String) {
     thehome_plugin::log(level, message);

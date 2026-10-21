@@ -1,13 +1,13 @@
-# Fodbold til Homewright
+# Fodbold til HomewrightHQ
 
-En ekstern integration til [Homewright](https://github.com/magnusdunker/homewright), der viser, hvornår dine fodboldhold spiller næste gang, og mod hvem. Den kræver ingen nøgle eller konto.
+En ekstern integration til [HomewrightHQ](https://github.com/magnusdunker/homewrighthq), der viser, hvornår dine fodboldhold spiller næste gang, og mod hvem. Den kræver ingen nøgle eller konto.
 
 ## Installation
 
-I Homewright: **Indstillinger → Integrationer → Fra GitHub**. Indsæt
+I HomewrightHQ: **Indstillinger → Integrationer → Fra GitHub**. Indsæt
 
 ```
-https://github.com/magnusdunker/homewright-fodbold
+https://github.com/magnusdunker/homewrighthq-fodbold
 ```
 
 og tryk **Installér**. Tilføj derefter **Fodbold** under **Tilføj integration**.
@@ -73,12 +73,12 @@ Hold- og klub-id'er er de samme fra sæson til sæson; puljernes er ikke. Ændre
 
 ## Udvikling
 
-Bygget i Rust på SDK'en `thehome-plugin` fra [homewright-example-integration-rust](https://github.com/magnusdunker/homewright-example-integration-rust).
+Bygget i Rust på SDK'en `thehome-plugin` fra [homewright-example-integration-rust](https://github.com/magnusdunker/homewrighthq-example-integration-rust).
 
 - `src/espn.rs`: ligaerne, holdene og kampprogrammet fra ESPN
 - `src/dbu.rs`: 1. division fra DBU's resultatsider
-- `src/lib.rs`: opsætningen, opdateringen og forbindelsen til Homewright
-- `tests/`: tests mod rigtige svar fra ESPN og DBU i `tests/fixtures` (hentet 2026-10-20; DBU's sider uden kontaktpersoner), mod et falsk ESPN og DBU og med en falsk Homewright i `tests/host`
+- `src/lib.rs`: opsætningen, opdateringen og forbindelsen til HomewrightHQ
+- `tests/`: tests mod rigtige svar fra ESPN og DBU i `tests/fixtures` (hentet 2026-10-20; DBU's sider uden kontaktpersoner), mod et falsk ESPN og DBU og med en falsk HomewrightHQ i `tests/host`
 
 ```
 cargo test
