@@ -1,6 +1,6 @@
 [package]
 name = "homewright-fodbold"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 license = "MIT"
 description = "Næste kamp for dine fodboldhold som ekstern integration til HomewrightHQ"
