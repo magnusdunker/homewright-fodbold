@@ -1,42 +1,42 @@
-# Fodbold til HomewrightHQ
+# Fodbold for HomewrightHQ
 
-En ekstern integration til [HomewrightHQ](https://github.com/magnusdunker/homewrighthq), der viser, hvornår dine fodboldhold spiller næste gang, og mod hvem. Den kræver ingen nøgle eller konto.
+An external integration for [HomewrightHQ](https://github.com/magnusdunker/homewrighthq) that shows when your football teams play next, and against whom. It needs no key or account.
 
 ## Installation
 
-I HomewrightHQ: **Indstillinger → Integrationer → Fra GitHub**. Indsæt
+In HomewrightHQ: **Settings → Integrations → From GitHub**. Paste
 
 ```
 https://github.com/magnusdunker/homewrighthq-fodbold
 ```
 
-og tryk **Installér**. Tilføj derefter **Fodbold** under **Tilføj integration**.
+and press **Install**. Then add **Fodbold** under **Add integration**.
 
-Vælg først de ligaer, dine hold spiller i, og derefter holdene. Du kan vælge hold fra flere ligaer på én gang, fx AGF og Liverpool. Holdene kan ændres senere under integrationens indstillinger.
+First choose the leagues your teams play in, then the teams. You can choose teams from several leagues at once, e.g. AGF and Liverpool. The teams can be changed later under the integration's options.
 
-Ligaerne er Superligaen, 1. division, Premier League, Championship, LaLiga, Bundesliga, 2. Bundesliga, Serie A, Ligue 1, Eredivisie, Primeira Liga, Scottish Premiership, Allsvenskan, Eliteserien og MLS. Under **Landshold** står Europas landshold.
+The leagues are Superligaen, 1. division, Premier League, Championship, LaLiga, Bundesliga, 2. Bundesliga, Serie A, Ligue 1, Eredivisie, Primeira Liga, Scottish Premiership, Allsvenskan, Eliteserien and MLS. Under **Landshold** (national teams) are Europe's national teams.
 
-## Hvad du får
+## What you get
 
-En enhed pr. hold med to entities:
+A device per team with two entities:
 
-- **Næste kamp** (`sensor`, device class `timestamp`): hvornår kampen starter. Attributterne er:
-  - `match`: hjemmeholdet først, fx "AGF - Viborg FF"
-  - `when`: tidspunktet på dansk, fx "søndag 25. oktober kl. 18:00"
-  - `opponent`, `home` og `home_away` (`hjemme` eller `ude`)
-  - `competition` (fx "Superligaen" eller "Conference League") og `round` (fx "League Phase"), når det ikke er den almindelige sæson
-  - `venue` og `city`
-  - `tv`: kanalen, for 1. division
-  - `time_confirmed`: falsk, når tidspunktet ikke er fastlagt endnu
-  - `in_progress`: sand, mens kampen spilles
-  - `upcoming`: de næste fem kampe med `start`, `when`, `match`, `opponent`, `home_away`, `competition`, `round`, `venue`, `tv` og `time_confirmed`
-- **Modstander** (`sensor`): modstanderens navn, med `home_away`, `start`, `when`, `competition`, `venue` og modstanderens logo som billede.
+- **Næste kamp** (next match, `sensor`, device class `timestamp`): when the match starts. The attributes are:
+  - `match`: home team first, e.g. "AGF - Viborg FF"
+  - `when`: the time in Danish, e.g. "søndag 25. oktober kl. 18:00"
+  - `opponent`, `home` and `home_away` (`hjemme` or `ude`, home or away)
+  - `competition` (e.g. "Superligaen" or "Conference League") and `round` (e.g. "League Phase"), when it is not the regular season
+  - `venue` and `city`
+  - `tv`: the channel, for 1. division
+  - `time_confirmed`: false when the time is not fixed yet
+  - `in_progress`: true while the match is being played
+  - `upcoming`: the next five matches with `start`, `when`, `match`, `opponent`, `home_away`, `competition`, `round`, `venue`, `tv` and `time_confirmed`
+- **Modstander** (opponent, `sensor`): the opponent's name, with `home_away`, `start`, `when`, `competition`, `venue` and the opponent's logo as the picture.
 
-Har holdet ingen kampe i programmet, fx i vinterpausen, er begge `unknown`.
+If the team has no matches in the schedule, e.g. in the winter break, both are `unknown`.
 
-Kampene hentes hver time. Fejler det tre gange i træk, bliver holdets entities utilgængelige, indtil det lykkes igen.
+The matches are fetched every hour. If that fails three times in a row, the team's entities become unavailable until it succeeds again.
 
-En påmindelse en time før kampen:
+A reminder an hour before the match:
 
 ```yaml
 triggers:
@@ -52,43 +52,43 @@ actions:
         ({{ state_attr('sensor.agf_naeste_kamp', 'competition') }}).
 ```
 
-## Hvor kampene kommer fra
+## Where the matches come from
 
 ### ESPN
 
-Integrationen læser ESPN's JSON på `https://site.api.espn.com/apis/site/v2/sports/soccer`. Det kræver ingen nøgle, og det dækker ligaer, pokalturneringer og de europæiske turneringer med tidspunkter, stadion og logoer. Det er ikke et officielt, dokumenteret API, så det kan ændre sig.
+The integration reads ESPN's JSON at `https://site.api.espn.com/apis/site/v2/sports/soccer`. It needs no key, and it covers leagues, cup competitions and the European competitions with kick-off times, stadium and logos. It is not an official, documented API, so it can change.
 
-ESPN har et kampprogram pr. hold og turnering. Et holds næste kamp findes derfor ved at spørge dets liga, ligaens pokalturneringer og Champions League, Europa League og Conference League, og tage den første. For landshold spørges Nations League, VM, EM, kvalifikationerne og venskabskampe. ESPN har ikke DBU Pokalen, så den er ikke med for Superliga-holdene.
+ESPN has a schedule per team and competition. A team's next match is therefore found by asking its league, the league's cup competitions and the Champions League, Europa League and Conference League, and taking the first one. For national teams it asks the Nations League, World Cup, European Championship, the qualifiers and friendlies. ESPN does not have DBU Pokalen, so it is not included for the Superliga teams.
 
 ### DBU, for 1. division
 
-ESPN har ikke 1. division, så de hold kommer fra DBU's resultatsider på [dbu.dk/resultater](https://www.dbu.dk/resultater/). DBU har intet åbent API, så integrationen læser de offentlige sider:
+ESPN does not have 1. division, so those teams come from DBU's results pages at [dbu.dk/resultater](https://www.dbu.dk/resultater/). DBU has no open API, so the integration reads the public pages:
 
-- Rækkesøgningen for landsdækkende seniorrækker for herrer i denne sæson. 1. division er rækken med `LIGA` i navnet (i dag "Betinia LIGA - Grundspil 2026/27"), så den findes også, når sponsoren skifter.
-- Rækkens pulje og dens holdoversigt, når du vælger hold. Holdets side giver klubben.
-- Klubbens side ved hver opdatering. Den viser de puljer, holdet spiller i i denne sæson, så ligaen, op- og nedrykningsspillet og Betano Pokalen kommer med, uden at integrationen kender deres id'er.
-- Holdets kampprogram i hver af puljerne. Tiderne er dansk tid.
+- The league search for nationwide men's senior leagues this season. 1. division is the league with `LIGA` in its name (currently "Betinia LIGA - Grundspil 2026/27"), so it is still found when the sponsor changes.
+- The league's group and its team list, when you choose teams. The team's page gives the club.
+- The club's page at each update. It shows the groups the team plays in this season, so the league, the promotion and relegation play-offs and Betano Pokalen are included without the integration knowing their ids.
+- The team's schedule in each of the groups. The times are Danish time.
 
-Hold- og klub-id'er er de samme fra sæson til sæson; puljernes er ikke. Ændrer DBU sine sider, kan læsningen gå i stykker.
+Team and club ids are the same from season to season; group ids are not. If DBU changes its pages, the reading can break.
 
-## Udvikling
+## Development
 
-Bygget i Rust på SDK'en `thehome-plugin` fra [homewright-example-integration-rust](https://github.com/magnusdunker/homewrighthq-example-integration-rust).
+Built in Rust on the `thehome-plugin` SDK from [homewright-example-integration-rust](https://github.com/magnusdunker/homewrighthq-example-integration-rust).
 
-- `src/espn.rs`: ligaerne, holdene og kampprogrammet fra ESPN
-- `src/dbu.rs`: 1. division fra DBU's resultatsider
-- `src/lib.rs`: opsætningen, opdateringen og forbindelsen til HomewrightHQ
-- `tests/`: tests mod rigtige svar fra ESPN og DBU i `tests/fixtures` (hentet 2026-10-20; DBU's sider uden kontaktpersoner), mod et falsk ESPN og DBU og med en falsk HomewrightHQ i `tests/host`
+- `src/espn.rs`: the leagues, the teams and the schedule from ESPN
+- `src/dbu.rs`: 1. division from DBU's results pages
+- `src/lib.rs`: the setup, the update and the connection to HomewrightHQ
+- `tests/`: tests against real responses from ESPN and DBU in `tests/fixtures` (fetched 2026-10-20; DBU's pages without contact persons), against a fake ESPN and DBU and with a fake HomewrightHQ in `tests/host`
 
 ```
 cargo test
-cargo test -- --ignored live --nocapture       # mod ESPN
-cargo test -- --ignored live_dbu --nocapture   # mod DBU
+cargo test -- --ignored live --nocapture       # against ESPN
+cargo test -- --ignored live_dbu --nocapture   # against DBU
 cargo build --release
 ```
 
-En ny version udgives med et tag, fx `git tag v0.2.0 && git push origin v0.2.0`. Workflowet bygger til Windows, Linux (x86_64 og arm64, statisk musl) og macOS og lægger binærerne på releasen.
+A new version is released with a tag, e.g. `git tag v0.2.0 && git push origin v0.2.0`. The workflow builds for Windows, Linux (x86_64 and arm64, static musl) and macOS and puts the binaries on the release.
 
-## Licens
+## License
 
-MIT. Kampprogram og logoer er fra ESPN og DBU.
+MIT. Schedule and logos are from ESPN and DBU.
